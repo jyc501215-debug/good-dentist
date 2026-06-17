@@ -30,26 +30,44 @@ window._fb = { db, auth, collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
 // ── Auth state observer ──
 onAuthStateChanged(auth, async (user) => {
   if (user) {
-    // Fetch user profile from Firestore
     try {
-      const snap = await getDocs(query(collection(db, 'users')));
-      const profile = snap.docs.map(d => ({id: d.id, ...d.data()})).find(u => u.email === user.email);
-      if (profile && profile.active !== false) {
-        window.currentUser = { ...profile, firebaseUid: user.uid };
-        window.bootApp();
-      } else {
-        await signOut(auth);
-        showLoginErr('帳號已停用或找不到權限設定，請聯絡老闆');
+      const snap = await getDocs(collection(db, 'users'));
+      let profile = snap.docs.map(d => ({firestoreId: d.id, ...d.data()})).find(u => u.email === user.email);
+
+      // ── Auto-create boss profile if users collection is empty or user not found ──
+      if (!profile) {
+        const isFirstUser = snap.empty;
+        const newProfile = {
+          name: isFirstUser ? '老闆' : user.email.split('@')[0],
+          email: user.email,
+          role: isFirstUser ? 'boss' : 'staff',
+          active: true,
+          createdAt: new Date().toISOString()
+        };
+        const docRef = await addDoc(collection(db, 'users'), newProfile);
+        profile = { firestoreId: docRef.id, ...newProfile };
       }
+
+      if (profile.active === false) {
+        await signOut(auth);
+        showLoginErr('此帳號已被停用，請聯絡老闆');
+        return;
+      }
+
+      window.currentUser = { ...profile, firebaseUid: user.uid };
+      window.bootApp();
     } catch(e) {
       console.error(e);
-      showLoginErr('讀取權限時發生錯誤: ' + e.message);
+      // Hide loading, show login with error
+      document.getElementById('loadingOverlay').style.display = 'none';
+      showLoginErr('連線錯誤：' + e.message);
     }
   } else {
     window.currentUser = null;
+    document.getElementById('loadingOverlay').style.display = 'none';
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('appShell').style.display = 'none';
-    document.getElementById('syncStatus').textContent = '';
+    document.getElementById('syncStatus') && (document.getElementById('syncStatus').textContent = '');
   }
 });
 
@@ -513,13 +531,13 @@ window.seedIfEmpty = async function() {
 <div id="loadingOverlay">
   <div class="spin">🦷</div>
   <div style="font-size:16px;font-weight:700;margin-bottom:8px">固徳牙醫診所</div>
-  <div style="font-size:13px;opacity:.7">連線中...</div>
+  <div style="font-size:13px;opacity:.7" id="loadingMsg">連線中...</div>
 </div>
 
 
 
 <!-- ══════════ LOGIN ══════════ -->
-<div id="loginScreen">
+<div id="loginScreen" style="display:none">
   <div class="login-card">
     <div class="login-logo">🦷</div>
     <div class="login-clinic">固徳牙醫診所</div>
