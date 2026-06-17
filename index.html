@@ -564,7 +564,7 @@ document.getElementById('loginScreen').style.display = 'none';
       <label>密碼</label>
       <input type="password" id="loginPass" placeholder="請輸入密碼" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
     </div>
-    <button class="login-btn" onclick="doLogin()">登入</button>
+    <button class="login-btn" id="loginBtn">登入</button>
     <div class="login-err" id="loginErr"></div>
     <div class="login-footer">固徳牙醫診所 · 庫房管理系統 · 僅限授權人員使用</div>
   </div>
@@ -1008,9 +1008,22 @@ window.bootApp = async function() {
   showSection('dashboard');
 };
 
-// ── Login (delegates to Firebase module) ──
-function doLogin() { window.doLogin(); }
-function doLogout() { window.doLogout(); }
+// ── Login button listener (safer than onclick for module scripts) ──
+document.getElementById('loginBtn').addEventListener('click', function() {
+  if(typeof window.doLogin === 'function') {
+    window.doLogin();
+  } else {
+    document.getElementById('loginErr').textContent = 'Firebase 尚未載入，請重新整理頁面';
+  }
+});
+document.getElementById('loginPass').addEventListener('keydown', function(e) {
+  if(e.key === 'Enter') document.getElementById('loginBtn').click();
+});
+document.getElementById('loginEmail').addEventListener('keydown', function(e) {
+  if(e.key === 'Enter') document.getElementById('loginPass').focus();
+});
+function doLogin() { if(window.doLogin) window.doLogin(); }
+function doLogout() { if(window.doLogout) window.doLogout(); }
 
 // ── Account management ──
 function renderAccounts() {
