@@ -28,19 +28,28 @@ const auth = getAuth(app);
 window._fb = { db, auth, collection, doc, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword };
 
 // ── Auth state observer ──
+// ── Timeout: if Firebase doesn't respond in 8 seconds, show login ──
+const _authTimeout = setTimeout(() => {
+  if(!window.currentUser) {
+    document.getElementById('loadingOverlay').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+  }
+}, 8000);
+
 onAuthStateChanged(auth, async (user) => {
+  clearTimeout(_authTimeout);
   if (user) {
     try {
+      document.getElementById('loadingMsg') && (document.getElementById('loadingMsg').textContent = '讀取帳號中...');
       const snap = await getDocs(collection(db, 'users'));
       let profile = snap.docs.map(d => ({firestoreId: d.id, ...d.data()})).find(u => u.email === user.email);
 
-      // ── Auto-create boss profile if users collection is empty or user not found ──
+      // ── Auto-create boss profile if not found ──
       if (!profile) {
-        const isFirstUser = snap.empty;
         const newProfile = {
-          name: isFirstUser ? '老闆' : user.email.split('@')[0],
+          name: snap.empty ? '老闆' : user.email.split('@')[0],
           email: user.email,
-          role: isFirstUser ? 'boss' : 'staff',
+          role: snap.empty ? 'boss' : 'staff',
           active: true,
           createdAt: new Date().toISOString()
         };
@@ -50,6 +59,7 @@ onAuthStateChanged(auth, async (user) => {
 
       if (profile.active === false) {
         await signOut(auth);
+        document.getElementById('loadingOverlay').style.display = 'none';
         showLoginErr('此帳號已被停用，請聯絡老闆');
         return;
       }
@@ -57,8 +67,7 @@ onAuthStateChanged(auth, async (user) => {
       window.currentUser = { ...profile, firebaseUid: user.uid };
       window.bootApp();
     } catch(e) {
-      console.error(e);
-      // Hide loading, show login with error
+      console.error('Auth error:', e);
       document.getElementById('loadingOverlay').style.display = 'none';
       showLoginErr('連線錯誤：' + e.message);
     }
@@ -67,7 +76,8 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById('loadingOverlay').style.display = 'none';
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('appShell').style.display = 'none';
-    document.getElementById('syncStatus') && (document.getElementById('syncStatus').textContent = '');
+    const ss = document.getElementById('syncStatus');
+    if(ss) ss.textContent = '';
   }
 });
 
@@ -533,11 +543,15 @@ window.seedIfEmpty = async function() {
   <div style="font-size:16px;font-weight:700;margin-bottom:8px">固徳牙醫診所</div>
   <div style="font-size:13px;opacity:.7" id="loadingMsg">連線中...</div>
 </div>
+<script>
+// Hide login screen immediately while Firebase loads
+document.getElementById('loginScreen').style.display = 'none';
+</script>
 
 
 
 <!-- ══════════ LOGIN ══════════ -->
-<div id="loginScreen" style="display:none">
+<div id="loginScreen">
   <div class="login-card">
     <div class="login-logo">🦷</div>
     <div class="login-clinic">固徳牙醫診所</div>
